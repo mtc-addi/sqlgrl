@@ -7,7 +7,7 @@ import (
 	"tsqlgrl/generic"
 )
 
-func ParseStream(r io.Reader) error {
+func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 
 	//ensure keywords sorted by length then alphabet
 	generic.SortKeywords(KEYWORDS)
@@ -15,7 +15,7 @@ func ParseStream(r io.Reader) error {
 	//read the whole file at once into a string
 	buf, err := io.ReadAll(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	src := string(buf)
 
@@ -35,7 +35,7 @@ func ParseStream(r io.Reader) error {
 		//scan for whitespace
 		ok, err := s.MatchCharsetMulti(generic.CHARSET_WHITESPACE, "whitespace")
 		if err != nil {
-			return generic.Errorf(err, "error while reading whitespace at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading whitespace at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -44,7 +44,7 @@ func ParseStream(r io.Reader) error {
 		//scan for whitespace
 		ok, err = s.MatchCharsetMulti(generic.CHARSET_NEWLINE, "newline")
 		if err != nil {
-			return generic.Errorf(err, "error while reading newline at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading newline at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -53,7 +53,7 @@ func ParseStream(r io.Reader) error {
 		//scan for comment lines
 		ok, err = s.PeakMatchUntilCharset("--", generic.CHARSET_NEWLINE, "comment")
 		if err != nil {
-			return generic.Errorf(err, "error while reading comment at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading comment at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -62,7 +62,7 @@ func ParseStream(r io.Reader) error {
 		//scan for string literals enclosed by double quotes
 		ok, err = s.MatchEnclosed("\"", "string")
 		if err != nil {
-			return generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -71,7 +71,7 @@ func ParseStream(r io.Reader) error {
 		//scan for string literals enclosed by single quotes
 		ok, err = s.MatchEnclosed("'", "string")
 		if err != nil {
-			return generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -80,7 +80,7 @@ func ParseStream(r io.Reader) error {
 		//scan for floating point (decimal separated)
 		ok, err = s.MatchRegex(generic.REGEX_FLOAT, "float")
 		if err != nil {
-			return generic.Errorf(err, "error while reading float at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading float at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -89,7 +89,7 @@ func ParseStream(r io.Reader) error {
 		//scan for integer (no decimal)
 		ok, err = s.MatchCharsetMulti(generic.CHARSET_INT, "int")
 		if err != nil {
-			return generic.Errorf(err, "error while reading int at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading int at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -98,7 +98,7 @@ func ParseStream(r io.Reader) error {
 		//scan for single char symbols
 		ok, err = s.MatchCharset(".,();*", "symbol")
 		if err != nil {
-			return generic.Errorf(err, "error while reading symbol at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading symbol at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -107,7 +107,7 @@ func ParseStream(r io.Reader) error {
 		//scan for comment lines
 		ok, err = s.PeakMatchUntilCharset("@", generic.CHARSET_NEWLINE, "include")
 		if err != nil {
-			return generic.Errorf(err, "error while reading comment at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading comment at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -116,7 +116,7 @@ func ParseStream(r io.Reader) error {
 		//scan for keywords
 		ok, err = s.MatchAnyString(KEYWORDS, "keyword")
 		if err != nil {
-			return generic.Errorf(err, "error while reading keyword at %s", s.DebugLocation())
+			return nil, generic.Errorf(err, "error while reading keyword at %s", s.DebugLocation())
 		}
 		if ok {
 			continue
@@ -124,9 +124,8 @@ func ParseStream(r io.Reader) error {
 
 		err = fmt.Errorf("unhandled data at line %s", s.DebugLocation())
 		log.Println(s.Output())
-		return err
+		return nil, err
 	}
 
-	log.Println(s.Output())
-	return nil
+	return s.Output(), nil
 }

@@ -47,7 +47,15 @@ func HandleFile(fpath string) error {
 	}
 	defer f.Close()
 
-	err = oracle.ParseStream(f)
+	tokens, err := oracle.TokenizeFile(f)
+	if err != nil {
+		return err
+	}
+
+	// log.Println(tokens)
+	p := oracle.NewParser()
+	err = p.Parse(tokens)
+
 	if err != nil {
 		return err
 	}

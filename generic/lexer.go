@@ -36,6 +36,8 @@ type Token struct {
 	LineEnd   int
 }
 
+type Tokens []*Token
+
 func (t Token) String() string {
 	return fmt.Sprintf("{ %s %q }\n", t.Type, t.Content)
 }
@@ -44,7 +46,7 @@ type Lexer struct {
 	src         string
 	offset      int
 	LineCounter int
-	tokens      []Token
+	tokens      Tokens
 }
 
 func NewLexer(src string) *Lexer {
@@ -171,7 +173,7 @@ func (s *Lexer) MatchAnyString(ms []string, outputType string) (bool, error) {
  * does not append to lexer.tokens but returns instead
 	* does not advance read offset or line counter
 */
-func (s *Lexer) TokenFrom(n int, outputType string) Token {
+func (s *Lexer) TokenFrom(n int, outputType string) *Token {
 	Start := s.offset
 	Count := n
 	End := Start + Count
@@ -182,7 +184,7 @@ func (s *Lexer) TokenFrom(n int, outputType string) Token {
 	LineCount := CountNewLines(Content)
 	LineEnd := LineStart + LineCount
 
-	result := Token{
+	result := &Token{
 		Content:   Content,
 		Start:     Start,
 		End:       End,
@@ -312,7 +314,7 @@ func (s *Lexer) MatchEOF() bool {
 	return s.Available() < 1
 }
 
-func (s *Lexer) Output() []Token {
+func (s *Lexer) Output() Tokens {
 	return s.tokens
 }
 
