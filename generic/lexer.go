@@ -36,10 +36,18 @@ type Token struct {
 	LineEnd   int
 }
 
-type Tokens []*Token
-
 func (t Token) String() string {
 	return fmt.Sprintf("{ %s %q }\n", t.Type, t.Content)
+}
+
+type Tokens = []*Token
+
+func JoinTokensContent(ts []*Token, delim string) string {
+	results := []string{}
+	for _, t := range ts {
+		results = append(results, t.Content)
+	}
+	return strings.Join(results, delim)
 }
 
 type Lexer struct {
@@ -198,11 +206,12 @@ func (s *Lexer) TokenFrom(n int, outputType string) *Token {
 /* Creates a token given n chars to read
  * automatically appends to lexer.tokens and advances read offset, line counter
  */
-func (s *Lexer) TokenFromAdvance(n int, outputType string) {
+func (s *Lexer) TokenFromAdvance(n int, outputType string) *Token {
 	t := s.TokenFrom(n, outputType)
 	s.tokens = append(s.tokens, t)
 	s.offset = t.End
 	s.LineCounter = t.LineEnd
+	return t
 }
 
 /* Tries to append a token that ends with a char from suffixCharset
@@ -236,11 +245,15 @@ func (s *Lexer) PeakMatchUntilCharset(prefix string, suffixCharset string, outpu
 	return s.MatchUntilCharset(suffixCharset, outputType)
 }
 
+func (s *Lexer) MatchEnclosed(edge string, outputType string) (bool, error) {
+	return s.MatchEnclosedIncludeEdge(edge, outputType, false)
+}
+
 /*
  * Tries to append a token that begins and ends with 'edge' string
  * Implemented to fulfill "some string 'blah blah' blah 123"
  */
-func (s *Lexer) MatchEnclosed(edge string, outputType string) (bool, error) {
+func (s *Lexer) MatchEnclosedIncludeEdge(edge string, outputType string, includeEdge bool) (bool, error) {
 	edgeLen := len(edge)
 
 	str, err := s.PeakN(edgeLen)
@@ -266,7 +279,11 @@ func (s *Lexer) MatchEnclosed(edge string, outputType string) (bool, error) {
 
 	Count := End - Start
 
-	s.TokenFromAdvance(Count, outputType)
+	t := s.TokenFromAdvance(Count, outputType)
+
+	if !includeEdge {
+		t.Content = strings.TrimSuffix(strings.TrimPrefix(t.Content, edge), edge)
+	}
 
 	return true, nil
 }

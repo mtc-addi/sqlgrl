@@ -1,6 +1,7 @@
 package generic
 
 import (
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -48,7 +49,12 @@ func (p *Parser) PeakN(n int) (Tokens, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.tokens[p.offset:n], nil
+	return p.tokens[p.offset : p.offset+n], nil
+}
+
+func (p *Parser) PeakMaxN(n int) (Tokens, error) {
+	_max := min(p.Available(), n)
+	return p.PeakN(_max)
 }
 
 func (p *Parser) ExpectType(t string) (bool, error) {
@@ -93,6 +99,10 @@ func (p *Parser) Advance() {
 	p.offset++
 }
 
+func (p *Parser) AdvanceLen(t Tokens) {
+	p.offset += len(t)
+}
+
 func (p *Parser) Get() *Token {
 	return p.tokens[p.offset]
 }
@@ -108,12 +118,54 @@ func (p *Parser) Ignore(t string) bool {
 
 func (p *Parser) IgnoreRepeated(t string) int {
 	counter := 0
-	tlen := len(p.tokens)
+	tlen := len(p.tokens[p.offset:])
 	for i := 0; i < tlen; i++ {
 		if !p.Ignore(t) {
 			break
 		}
 		counter++
 	}
+	// log.Println("ignored", counter, t)
 	return counter
+}
+
+func (p *Parser) ConsumeUntil(t string, content string, _max int) (Tokens, error) {
+	_max = min(p.Available(), _max)
+	searchSpace := p.tokens[p.offset : p.offset+_max]
+
+	idx := slices.IndexFunc(searchSpace, func(tok *Token) bool {
+		return tok.Type == t && tok.Content == content
+	})
+
+	if idx == -1 {
+		return nil, fmt.Errorf("exhausted search space without finding %s %s", t, content)
+	}
+	return searchSpace[:idx], nil
+}
+
+func (p *Parser) IsTokenIndexValid(i int) bool {
+	max := len(p.tokens) - 1
+	min := 0
+	return i >= min && i <= max
+}
+
+func (p *Parser) DebugLocation() string {
+	var startStr string
+	var contentStr string
+	ts, err := p.PeakMaxN(8)
+	tslen := len(ts)
+
+	if err != nil {
+		startStr = fmt.Sprintf("[failed to debug location due to: %s]", err.Error())
+	} else {
+		if tslen < 1 {
+			startStr = "no available tokens for debug location info, past max"
+		} else {
+			start := ts[0]
+			startStr = fmt.Sprintf("line %d", start.LineStart+1)
+			contentStr = JoinTokensContent(ts, " ")
+		}
+	}
+
+	return fmt.Sprintf("tokens at %d aka %s %q [..]", p.offset, startStr, contentStr)
 }

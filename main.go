@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io/fs"
 	"log"
 	"os"
@@ -55,6 +56,16 @@ func HandleFile(fpath string) error {
 	// log.Println(tokens)
 	p := oracle.NewParser()
 	err = p.Parse(tokens)
+	if err != nil {
+		return err
+	}
+
+	bs, err := json.MarshalIndent(p.Tables, "", " ")
+	if err != nil {
+		return err
+	}
+	str := string(bs)
+	log.Println(str)
 
 	if err != nil {
 		return err

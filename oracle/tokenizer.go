@@ -7,6 +7,10 @@ import (
 	"tsqlgrl/generic"
 )
 
+const TT_SYMBOL string = "symbol"
+const TT_STRING string = "string"
+const TT_KEYWORD string = "keyword"
+
 func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 
 	//ensure keywords sorted by length then alphabet
@@ -60,7 +64,7 @@ func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 		}
 
 		//scan for string literals enclosed by double quotes
-		ok, err = s.MatchEnclosed("\"", "string")
+		ok, err = s.MatchEnclosed("\"", TT_STRING)
 		if err != nil {
 			return nil, generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
 		}
@@ -69,7 +73,7 @@ func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 		}
 
 		//scan for string literals enclosed by single quotes
-		ok, err = s.MatchEnclosed("'", "string")
+		ok, err = s.MatchEnclosed("'", TT_STRING)
 		if err != nil {
 			return nil, generic.Errorf(err, "error while reading string at %s", s.DebugLocation())
 		}
@@ -96,7 +100,7 @@ func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 		}
 
 		//scan for single char symbols
-		ok, err = s.MatchCharset(".,();*", "symbol")
+		ok, err = s.MatchCharset(".,();*", TT_SYMBOL)
 		if err != nil {
 			return nil, generic.Errorf(err, "error while reading symbol at %s", s.DebugLocation())
 		}
@@ -114,7 +118,7 @@ func TokenizeFile(r io.Reader) (generic.Tokens, error) {
 		}
 
 		//scan for keywords
-		ok, err = s.MatchAnyString(KEYWORDS, "keyword")
+		ok, err = s.MatchAnyString(KEYWORDS, TT_KEYWORD)
 		if err != nil {
 			return nil, generic.Errorf(err, "error while reading keyword at %s", s.DebugLocation())
 		}
