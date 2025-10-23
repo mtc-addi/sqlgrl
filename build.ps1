@@ -1,0 +1,1 @@
+pigeon -o "./oracle/parser.go" "./oracle/grammar.peg"

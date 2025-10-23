@@ -7,34 +7,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"tsqlgrl/oracle"
 )
-
-var wsRegex regexp.Regexp = *regexp.MustCompile(`\s+`)
-
-func IndexOfStartsWith(parts []string, start string) int {
-	for i, part := range parts {
-		if strings.HasPrefix(part, start) {
-			return i
-		}
-	}
-	return -1
-}
-func StrArrTrimAfter(parts []string, after string) []string {
-	i := IndexOfStartsWith(parts, after)
-	if i == -1 {
-		return parts
-	}
-	return parts[:i]
-}
-
-func StrArrToLower(parts []string) {
-	for i, part := range parts {
-		parts[i] = strings.ToLower(part)
-	}
-}
 
 func HandleFile(fpath string) error {
 	log.Println(fpath)
@@ -48,28 +23,16 @@ func HandleFile(fpath string) error {
 	}
 	defer f.Close()
 
-	tokens, err := oracle.TokenizeFile(f)
+	res, err := oracle.ParseReader(fpath, f)
 	if err != nil {
 		return err
 	}
-
-	// log.Println(tokens)
-	p := oracle.NewParser()
-	err = p.Parse(tokens)
-	if err != nil {
-		return err
-	}
-
-	bs, err := json.MarshalIndent(p.Tables, "", " ")
+	bs, err := json.MarshalIndent(res, "", " ")
 	if err != nil {
 		return err
 	}
 	str := string(bs)
 	log.Println(str)
-
-	if err != nil {
-		return err
-	}
 
 	return nil
 }

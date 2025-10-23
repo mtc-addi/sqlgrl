@@ -1,0 +1,43 @@
+
+{
+  package oracle
+}
+
+File <- WhiteSpace? Statement+ WhiteSpace? EOF
+
+Statement <- WhiteSpace? CreateTable
+
+
+CreateTable <- "CREATE" WhiteSpace "TABLE" WhiteSpace name:TableName WhiteSpace TableBody ';' {
+  return map[string]any{ "type": "table","name": name}, nil
+}
+
+TableName <- Identifier
+
+TableBody <- TableBodyDef // / TableBodySelect
+
+TableBodyDef <- '(' Columns ')'
+
+Columns <- Column (WhiteSpace ',' WhiteSpace? Column)*
+
+Column <- Ident WhiteSpace ColumnType WhiteSpace? ColumnTypeArgs?
+
+ColumnType <- "INT" / "NUMBER" / "NUMERICAL" / "DECIMAL" / "VARCHAR" / "VARCHAR2"
+
+ColumnTypeArgs <- '(' [0-9,]* ')'
+
+//TableBodySelect <- SelectStatement
+
+//TODO
+//SelectStatement <- 'SELECT' .*
+
+ColumnName <- Identifier
+Identifier <- [a-zA-Z_][a-zA-Z0-9_]*
+
+Ignore <- (WhiteSpace / Comment)+
+
+WhiteSpace <- [ \t\r\n]*
+LineComment <- "--" (![\r\n] .)* ('\r'? '\n' / EOF)
+BlockComment <- "/*" (!"*/" .)* "*/"
+
+EOF <- !.
