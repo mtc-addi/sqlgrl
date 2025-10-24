@@ -1,43 +1,162 @@
 
 {
   package oracle
+  import "tsqlgrl/generic"
+  import "log"
 }
 
-File <- WhiteSpace? Statement+ WhiteSpace? EOF
-
-Statement <- WhiteSpace? CreateTable
-
-
-CreateTable <- "CREATE" WhiteSpace "TABLE" WhiteSpace name:TableName WhiteSpace TableBody ';' {
-  return map[string]any{ "type": "table","name": name}, nil
+File <- WhiteSpace? stmts:(Statement WhiteSpace?)+ EOF {
+  var res []any
+  //for each pair in stmts
+  for _, stmt := range stmts.([]any) {
+    pair := stmt.([]any)
+    // pair[1] is WhiteSpace and we don't care about it
+    if pair[0] != nil {
+      res = append(res, pair[0])
+    }
+  }
+  return res, nil
 }
 
-TableName <- Identifier
+Statement <- CreateTable / Grant
+
+
+CreateTable <- "CREATE" WhiteSpace? "TABLE" WhiteSpace name:TableName WhiteSpace body:TableBody IgnoreTableEndParams ';' {
+  result := generic.TableDef{
+    Name: name.(string),
+    Columns: nil,
+  }
+
+  switch b := body.(type) {
+    case generic.ColumnsDef:
+      result.Columns = b
+    case string:
+      result.SelectStatement = b
+  }
+
+  return result, nil
+}
+
+Grant <- "GRANT" WhiteSpace? grantType:GrantType WhiteSpace? "ON" WhiteSpace? grantWhere:TableName WhiteSpace? "TO" WhiteSpace? grantWho:LiteralString WhiteSpace? ';' {
+  return generic.Grant{
+    Type: grantType.(string),
+    Where: grantWhere.(string),
+    Who: grantWho.(string),
+  }, nil
+}
+GrantType <- ("UPDATE" / "SELECT" / "INSERT") {
+  return string(c.text), nil
+}
+
+TableName <- first:TableNamePart second:('.' t:TableNamePart)? {
+    name := first.(string)
+    if second != nil {
+        // second is []any{ "." as []uint8, t as string }
+        parts := second.([]any)
+        dot := string(parts[0].([]uint8)) // literal "." match
+        name += dot + parts[1].(string)   // append second part
+    }
+    return name, nil
+}
+TableNamePart <- LiteralString / Identifier {
+  return string(c.text), nil
+}
 
 TableBody <- TableBodyDef // / TableBodySelect
 
-TableBodyDef <- '(' Columns ')'
+TableBodyDef <- '(' WhiteSpace? cols:Columns WhiteSpace? ')' {
+  return cols, nil
+}
 
-Columns <- Column (WhiteSpace ',' WhiteSpace? Column)*
+Columns <- items:(WhiteSpace? ','? WhiteSpace? Column)* {
+  results := generic.ColumnsDef{}
 
-Column <- Ident WhiteSpace ColumnType WhiteSpace? ColumnTypeArgs?
+  for _, item := range items.([]any) {
+    if item == nil {
+      continue
+    }
 
-ColumnType <- "INT" / "NUMBER" / "NUMERICAL" / "DECIMAL" / "VARCHAR" / "VARCHAR2"
+    for _, subitem := range item.([]any) {
+      if subitem == nil {
+        continue
+      }
 
-ColumnTypeArgs <- '(' [0-9,]* ')'
+      switch column := subitem.(type) {
+        case *generic.ColumnDef:
+          results[column.Name] = column
+      }
+    }
+
+  }
+
+  return results, nil
+}
+
+Column <- colname:ColumnName WhiteSpace? coltype:ColumnType WhiteSpace? ColumnTypeArgs? WhiteSpace? ColumnDefault? {
+  result := &generic.ColumnDef{
+    Name: colname.(string),
+    Type: coltype.(string),
+    //Default   string
+    //Precision int
+    //Scale     int
+  }
+  return result, nil
+}
+
+ColumnDefault <- "DEFAULT" WhiteSpace? LiteralValue?
+
+ColumnType <- ("CHAR" / "CLOB" / "DATE" / "INT" / "NUMBER" / "NUMERICAL" / "DECIMAL" / "VARCHAR2" / "VARCHAR") {
+  return string(c.text), nil
+}
+
+ColumnTypeArgs <- '(' WhiteSpace? [0-9,]* WhiteSpace? ColumnTypeKeyword? WhiteSpace? ')'
+
+ColumnTypeKeyword <- "BYTE"
+
+IgnoreTableEndParams <- (!';' .)*
 
 //TableBodySelect <- SelectStatement
 
 //TODO
 //SelectStatement <- 'SELECT' .*
 
-ColumnName <- Identifier
-Identifier <- [a-zA-Z_][a-zA-Z0-9_]*
+ColumnName <- LiteralString
 
-Ignore <- (WhiteSpace / Comment)+
+Identifier <- [a-zA-Z_][a-zA-Z0-9_]+
 
-WhiteSpace <- [ \t\r\n]*
-LineComment <- "--" (![\r\n] .)* ('\r'? '\n' / EOF)
-BlockComment <- "/*" (!"*/" .)* "*/"
+LiteralValue <- LiteralString / LiteralNumber
+
+LiteralNumber <- Sign? (Float / Integer)
+Sign <- [+-]
+Float <- Digits? '.' Digits (ExponentPart)? / Digits '.' (ExponentPart)?
+Integer <- Digits (ExponentPart)?
+ExponentPart <- [eE] [+-]? Digits
+Digits <- [0-9]+
+
+LiteralString <- LiteralStringSingleQuote / LiteralStringDoubleQuote
+LiteralStringSingleQuote <- '\'' (!'\'' .)* '\'' {
+  s := string(c.text)
+  return s[1:len(s)-1], nil //strip quotes
+}
+LiteralStringDoubleQuote <- '"' (!'"' .)* '"' {
+  s := string(c.text)
+  return s[1:len(s)-1], nil //strip quotes
+}
+
+WhiteSpace <- (Spaces / NewLines / LineComment / BlockComment)+
+Spaces <- Space+ {
+  return nil, nil
+}
+Space <- [ \t]
+NewLines <- NewLine+ {
+  return nil, nil
+}
+NewLine <- [ \r\n]
+LineComment <- "--" (![\r\n] .)* ('\r'? '\n' / EOF) {
+  return "", nil
+}
+BlockComment <- "/*" (!"*/" .)* "*/" {
+  return "", nil
+}
 
 EOF <- !.

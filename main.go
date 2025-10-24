@@ -33,6 +33,7 @@ func HandleFile(fpath string) error {
 	}
 	str := string(bs)
 	log.Println(str)
+	// log.Println(res)
 
 	return nil
 }

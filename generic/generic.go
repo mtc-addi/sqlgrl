@@ -5,17 +5,10 @@ import (
 	"fmt"
 )
 
-type ColumnDef struct {
-	Type      string
-	Default   string
-	Precision int
-	Scale     int
-}
-
-type ColumnsDef map[string]*ColumnDef
-
-type TableDef struct {
-	Columns ColumnsDef
+type Grant struct {
+	Type  string
+	Where string
+	Who   string
 }
 
 func (d *TableDef) String() string {
@@ -46,6 +39,22 @@ type DbOrigin struct {
 type TablesDef struct {
 	Origin DbOrigin
 	Tables map[string]*TableDef
+}
+
+type ColumnDef struct {
+	Name      string
+	Type      string
+	Default   string
+	Precision int
+	Scale     int
+}
+
+type ColumnsDef map[string]*ColumnDef
+
+type TableDef struct {
+	Name            string
+	Columns         ColumnsDef
+	SelectStatement string
 }
 
 func Errorf(err error, format string, a ...any) error {
