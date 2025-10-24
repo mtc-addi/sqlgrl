@@ -42,11 +42,17 @@ type TablesDef struct {
 }
 
 type ColumnDef struct {
-	Name      string
-	Type      string
-	Default   string
-	Precision int
-	Scale     int
+	Name        string
+	Type        string
+	Default     string `json:",omitempty"`
+	Precision   int    `json:",omitempty"`
+	Scale       int    `json:",omitempty"`
+	VarCharSize int    `json:",omitempty"`
+}
+
+type ColumnTypeArg struct {
+	Number int
+	Type   string
 }
 
 type ColumnsDef map[string]*ColumnDef
@@ -59,4 +65,9 @@ type TableDef struct {
 
 func Errorf(err error, format string, a ...any) error {
 	return errors.Join(err, fmt.Errorf(format, a...))
+}
+
+type Comment struct {
+	For  string
+	Text string
 }

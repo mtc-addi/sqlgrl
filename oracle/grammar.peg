@@ -3,6 +3,8 @@
   package oracle
   import "tsqlgrl/generic"
   import "log"
+  import "fmt"
+  import "strconv"
 }
 
 File <- WhiteSpace? stmts:(Statement WhiteSpace?)+ EOF {
@@ -18,10 +20,10 @@ File <- WhiteSpace? stmts:(Statement WhiteSpace?)+ EOF {
   return res, nil
 }
 
-Statement <- CreateTable / Grant
+Statement <- CreateTable / Grant / Comment / Include
 
 
-CreateTable <- "CREATE" WhiteSpace? "TABLE" WhiteSpace name:TableName WhiteSpace body:TableBody IgnoreTableEndParams ';' {
+CreateTable <- "CREATE" WhiteSpace? "GLOBAL"? WhiteSpace? "TEMPORARY"? WhiteSpace? "TABLE" WhiteSpace name:TableName WhiteSpace body:TableBody IgnoreTableEndParams ';' {
   result := generic.TableDef{
     Name: name.(string),
     Columns: nil,
@@ -37,25 +39,42 @@ CreateTable <- "CREATE" WhiteSpace? "TABLE" WhiteSpace name:TableName WhiteSpace
   return result, nil
 }
 
-Grant <- "GRANT" WhiteSpace? grantType:GrantType WhiteSpace? "ON" WhiteSpace? grantWhere:TableName WhiteSpace? "TO" WhiteSpace? grantWho:LiteralString WhiteSpace? ';' {
+Grant <- "GRANT" WhiteSpace? grantType:GrantType WhiteSpace? "ON" WhiteSpace? grantWhere:TableName WhiteSpace? "TO" WhiteSpace? grantWho:GrantWho WhiteSpace? ';' {
   return generic.Grant{
     Type: grantType.(string),
     Where: grantWhere.(string),
     Who: grantWho.(string),
   }, nil
 }
-GrantType <- ("UPDATE" / "SELECT" / "INSERT") {
+GrantWho <- (LiteralString/GrantPublic)
+GrantPublic <- "PUBLIC" {
+  return string(c.text), nil
+}
+GrantType <- ("UPDATE" / "SELECT" / "INSERT" / "DELETE") {
   return string(c.text), nil
 }
 
-TableName <- first:TableNamePart second:('.' t:TableNamePart)? {
+Comment <- "COMMENT" WhiteSpace? "ON" WhiteSpace? CommentOnKeyword WhiteSpace? name:TableName WhiteSpace? "IS" WhiteSpace? text:LiteralString WhiteSpace? ';' {
+  result := generic.Comment{
+    For: name.(string),
+    Text: text.(string),
+  }
+  return result, nil
+}
+CommentOnKeyword <- "TABLE" / "COLUMN"
+
+TableName <- first:TableNamePart rest:('.' TableNamePart)* {
+    // Start with the first name part
     name := first.(string)
-    if second != nil {
-        // second is []any{ "." as []uint8, t as string }
-        parts := second.([]any)
-        dot := string(parts[0].([]uint8)) // literal "." match
-        name += dot + parts[1].(string)   // append second part
+
+    // rest is a slice of []any, each of which looks like []any{"." as []uint8, "part" as string}
+    for _, r := range rest.([]any) {
+        parts := r.([]any)
+        dot := string(parts[0].([]uint8)) // the literal '.'
+        next := parts[1].(string)
+        name += dot + next
     }
+
     return name, nil
 }
 TableNamePart <- LiteralString / Identifier {
@@ -92,26 +111,106 @@ Columns <- items:(WhiteSpace? ','? WhiteSpace? Column)* {
   return results, nil
 }
 
-Column <- colname:ColumnName WhiteSpace? coltype:ColumnType WhiteSpace? ColumnTypeArgs? WhiteSpace? ColumnDefault? {
+Column <- colname:ColumnName WhiteSpace? coltype:ColumnType WhiteSpace? ColumnExtras? WhiteSpace? _c:ColumnTypeArgs? WhiteSpace? PreColumnDefault? WhiteSpace? defVal:ColumnDefault? {
+  coltypestr := coltype.(string)
+
+  defValStr := ""
+  if defVal != nil {
+    defValStr = defVal.(string)
+  }
+
   result := &generic.ColumnDef{
     Name: colname.(string),
-    Type: coltype.(string),
-    //Default   string
-    //Precision int
-    //Scale     int
+    Type: coltypestr,
+    Default: defValStr,
+  }
+  
+  if _c == nil {
+    return result, nil
+  }
+
+  items := _c.([]generic.ColumnTypeArg)
+  itemslen := len(items)
+
+  if itemslen > 0 {
+    switch coltypestr {
+      case "NUMBER","NUMERICAL","DECIMAL":
+        result.Precision = items[0].Number
+        if itemslen > 1 {
+          result.Scale = items[1].Number
+        }
+      case "VARCHAR", "VARCHAR2":
+        result.VarCharSize = items[0].Number
+
+    }
+  }
+
+  return result, nil
+}
+
+PreColumnDefault <- "WITH LOCAL TIME ZONE"
+ColumnExtras <- (WhiteSpace? ColumnExtra WhiteSpace?)+
+ColumnExtra <- ColumnExtraGen / ColumnExtraMinValue / ColumnExtraMaxValue / ColumnExtraInc / ColumnExtraStartWith / ColumnExtraNoOrder / ColumnExtraCacheSize / ColumnExtraNoCycle / ColumnExtraNoKeep / ColumnExtraNoScale
+ColumnExtraGen <- "GENERATED ALWAYS AS IDENTITY"
+ColumnExtraMinValue <- "MINVALUE" WhiteSpace? Digits
+ColumnExtraMaxValue <- "MAXVALUE" WhiteSpace? Digits
+ColumnExtraInc <- "INCREMENT BY" WhiteSpace? Digits
+ColumnExtraStartWith <- "START WITH" WhiteSpace? Digits
+ColumnExtraCacheSize <- "CACHE" WhiteSpace? Digits
+ColumnExtraNoOrder <- "NOORDER"
+ColumnExtraNoCycle <- "NOCYCLE"
+ColumnExtraNoKeep <- "NOKEEP"
+ColumnExtraNoScale <- "NOSCALE"
+
+
+ColumnDefault <- "DEFAULT" WhiteSpace? val:(LiteralValue / ColumnDefaultKeyword / FunctionCall)? {
+  switch val.(type) {
+    case []uint8:
+    return string(val.([]uint8)), nil
+    case string:
+    return val.(string), nil
+    default:
+    return nil, nil
+  }
+  //return val.(string), nil
+}
+
+ColumnDefaultKeyword <- ("SYSDATE" / "sysdate" / "localtimestamp" / "systimestamp" / "NULL" / "null")
+
+FunctionCall <- Identifier WhiteSpace? '(' FunctionArgs? ')'
+FunctionArgs <- (FunctionArg (WhiteSpace? ',' WhiteSpace? FunctionArg)*)?
+FunctionArg <- FunctionCall / LiteralValue / Identifier / (![(),] .)+
+
+ColumnType <- ("CHAR" / "BLOB" / "CLOB" / "DATE" / "DECIMAL" / "INT" / "LONG" / "NUMBER" / "NUMERICAL" / "RAW" / "TIMESTAMP" / "UROWID" / "VARCHAR2" / "VARCHAR" / "\"SYS\".\"XMLTYPE\"") {
+  return string(c.text), nil
+}
+
+ColumnTypeArgs <- '(' args:ColumnTypeArg+ ')' {
+  results := []generic.ColumnTypeArg{}
+  for _, arg := range args.([]any) {
+    results = append(results, arg.(generic.ColumnTypeArg))
+  }
+  return results, nil
+}
+
+ColumnTypeArg <- WhiteSpace? num:(Digits/'*') WhiteSpace? numType:ColumnTypeKeyword? WhiteSpace? ','? WhiteSpace? {
+  
+  result := generic.ColumnTypeArg{
+    Number: 0, //num.(int),
+  }
+  switch num.(type) {
+    case int:
+    result.Number = num.(int)
+  }
+  if numType != nil {
+    result.Type = numType.(string)
   }
   return result, nil
 }
 
-ColumnDefault <- "DEFAULT" WhiteSpace? LiteralValue?
-
-ColumnType <- ("CHAR" / "CLOB" / "DATE" / "INT" / "NUMBER" / "NUMERICAL" / "DECIMAL" / "VARCHAR2" / "VARCHAR") {
+ColumnTypeKeyword <- ("BYTE" / "CHAR") {
   return string(c.text), nil
 }
-
-ColumnTypeArgs <- '(' WhiteSpace? [0-9,]* WhiteSpace? ColumnTypeKeyword? WhiteSpace? ')'
-
-ColumnTypeKeyword <- "BYTE"
 
 IgnoreTableEndParams <- (!';' .)*
 
@@ -126,17 +225,30 @@ Identifier <- [a-zA-Z_][a-zA-Z0-9_]+
 
 LiteralValue <- LiteralString / LiteralNumber
 
-LiteralNumber <- Sign? (Float / Integer)
+LiteralNumber <- Sign? (Float / Integer) {
+  return string(c.text), nil
+}
 Sign <- [+-]
 Float <- Digits? '.' Digits (ExponentPart)? / Digits '.' (ExponentPart)?
 Integer <- Digits (ExponentPart)?
 ExponentPart <- [eE] [+-]? Digits
-Digits <- [0-9]+
+Digits <- [0-9]+ {
+  str := string(c.text)
+  i, err := strconv.Atoi(str)
+  if err != nil {
+    return math.MaxInt64, nil
+  }
+  return i, nil//err
+}
 
 LiteralString <- LiteralStringSingleQuote / LiteralStringDoubleQuote
-LiteralStringSingleQuote <- '\'' (!'\'' .)* '\'' {
-  s := string(c.text)
-  return s[1:len(s)-1], nil //strip quotes
+LiteralStringSingleQuote <- '\'' (("''" / !'\'' .)*) '\'' {
+    s := string(c.text)
+    // Strip the surrounding quotes
+    s = s[1:len(s)-1]
+    // Replace doubled single quotes with a single one
+    s = strings.ReplaceAll(s, "''", "'")
+    return s, nil
 }
 LiteralStringDoubleQuote <- '"' (!'"' .)* '"' {
   s := string(c.text)
@@ -156,6 +268,9 @@ LineComment <- "--" (![\r\n] .)* ('\r'? '\n' / EOF) {
   return "", nil
 }
 BlockComment <- "/*" (!"*/" .)* "*/" {
+  return "", nil
+}
+Include <- "@" (![\r\n] .)* ('\r'? '\n' / EOF) {
   return "", nil
 }
 

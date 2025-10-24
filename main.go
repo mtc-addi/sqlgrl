@@ -11,6 +11,8 @@ import (
 	"tsqlgrl/oracle"
 )
 
+var Counter = 0
+
 func HandleFile(fpath string) error {
 	log.Println(fpath)
 	ext := strings.ToLower(path.Ext(fpath))
@@ -33,6 +35,7 @@ func HandleFile(fpath string) error {
 	}
 	str := string(bs)
 	log.Println(str)
+	Counter++
 	// log.Println(res)
 
 	return nil
@@ -71,5 +74,5 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("done")
+	log.Println("done, parsed", Counter, "files")
 }
